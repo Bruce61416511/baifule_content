@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { configApi } from '../services/api'
 import { showMessage, textareaStyle, btnPrimary, btnSecondary, labelStyle, cardStyle } from '../services/ui'
 
-const PROMPT_KEYS = ['t2i', 't2v', 'i2v', 'r2v']
+// 注：prompts.json 里的 r2v（纯文本润色）当前无页面入口，参考视频页只走 parse/optimizeShot 两条链路，故不展示
+const PROMPT_KEYS = ['t2i', 't2v', 'i2v', 'r2v_parse', 'r2v_optimize']
 
 export default function PromptConfig() {
   const [prompts, setPrompts] = useState(null)
@@ -30,7 +31,7 @@ export default function PromptConfig() {
       <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: '#142528' }}>文件配置</h2>
-          <span style={{ fontSize: 13, color: '#8c8c8c' }}>配置四个生成模式的「一键优化提示词」系统提示词模板</span>
+          <span style={{ fontSize: 13, color: '#8c8c8c' }}>配置各生成模式的系统提示词模板（参考视频含脚本拆分镜、单镜头优化 2 套）</span>
         </div>
         <button onClick={handleSave} disabled={saving} style={{ ...btnPrimary, opacity: saving ? 0.6 : 1 }}>{saving ? '保存中...' : '💾 保存配置'}</button>
       </div>
