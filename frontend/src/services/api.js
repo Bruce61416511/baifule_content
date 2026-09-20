@@ -51,4 +51,10 @@ export const configApi = {
 export const optimizeApi = {
   optimize: (prompt, category) =>
     request('/optimize', { method: 'POST', body: JSON.stringify({ prompt, category }) }),
+  // 脚本 → 分镜列表（LLM 拆分镜 + 估时长 + 润色）
+  parseScript: (rawScript) =>
+    request('/parse-script', { method: 'POST', body: JSON.stringify({ raw_script: rawScript }) }),
+  // 单镜头重新估时长 + 润色
+  optimizeShot: ({ prompt, voiceover, duration }) =>
+    request('/optimize-shot', { method: 'POST', body: JSON.stringify({ prompt, voiceover, duration }) }),
 }

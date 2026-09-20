@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { generationApi } from '../services/api'
+import { generationApi, optimizeApi } from '../services/api'
 import {
   showMessage, textareaStyle, inputStyle, btnPrimary, btnSecondary, labelStyle, cardStyle,
   shotCardStyle, shotHeaderStyle, shotStatusBadgeStyle, shotBorderColor,
@@ -26,6 +26,7 @@ export default function RefVideo() {
   // ===== 全局素材 =====
   const [images, setImages] = useState([])
   const [audioFile, setAudioFile] = useState(null)
+  const [imageUrlInput, setImageUrlInput] = useState('')
 
   // ===== 分镜脚本 =====
   const [rawScript, setRawScript] = useState('')
@@ -38,8 +39,70 @@ export default function RefVideo() {
   const [resolution, setResolution] = useState('720P')
   const [ratio, setRatio] = useState('16:9')
   const [batchRunning, setBatchRunning] = useState(false)
+  const [optimizingShotIds, setOptimizingShotIds] = useState(new Set())
+  const [parsingScript, setParsingScript] = useState(false)
   const pollRef = useRef({})         // shotId -> intervalId
   const cancelRef = useRef(false)    // 取消批量生成的信号
+
+  // ===== 单镜头提示词优化（调 LLM：重新估时长 + 润色）=====
+  const handleOptimizeShot = async (shotId) => {
+    const shot = shots.find(s => s.id === shotId)
+    if (!shot || !shot.prompt.trim()) return showMessage('warning', '该分镜的提示词为空')
+    setOptimizingShotIds(prev => new Set(prev).add(shotId))
+    try {
+      const res = await optimizeApi.optimizeShot({
+        prompt: shot.prompt,
+        voiceover: shot.voiceover || '',
+        duration: shot.duration,
+      })
+      const patch = { prompt: res.prompt }
+      if (res.duration && res.duration !== shot.duration) {
+        patch.duration = res.duration
+      }
+      updateShot(shotId, patch)
+      showMessage('success', `#${shot.index} 已优化${res.duration !== shot.duration ? `（时长 ${shot.duration}s → ${res.duration}s）` : ''}`)
+    } catch (e) {
+      showMessage('error', '优化失败: ' + e.message)
+    } finally {
+      setOptimizingShotIds(prev => {
+        const next = new Set(prev)
+        next.delete(shotId)
+        return next
+      })
+    }
+  }
+
+  // ===== 批量优化所有分镜（串行：每镜重新估时长 + 润色）=====
+  const handleOptimizeAll = async () => {
+    if (shots.length === 0) return
+    const targets = shots.filter(s => s.prompt.trim())
+    if (targets.length === 0) return showMessage('warning', '所有分镜的提示词都为空')
+    setOptimizingShotIds(new Set(targets.map(s => s.id)))
+    let successCount = 0
+    let failCount = 0
+    let durationChanged = 0
+    for (const shot of targets) {
+      try {
+        const res = await optimizeApi.optimizeShot({
+          prompt: shot.prompt,
+          voiceover: shot.voiceover || '',
+          duration: shot.duration,
+        })
+        const patch = { prompt: res.prompt }
+        if (res.duration && res.duration !== shot.duration) {
+          patch.duration = res.duration
+          durationChanged++
+        }
+        updateShot(shot.id, patch)
+        successCount++
+      } catch (e) {
+        failCount++
+      }
+    }
+    setOptimizingShotIds(new Set())
+    showMessage(failCount === 0 ? 'success' : 'warning',
+      `优化完成：成功 ${successCount} 个${durationChanged > 0 ? `，其中 ${durationChanged} 个时长被调整` : ''}${failCount > 0 ? `，失败 ${failCount} 个` : ''}`)
+  }
 
   // ===== 更新单个镜头状态的辅助函数 =====
   const updateShot = (id, patch) => {
@@ -56,6 +119,19 @@ export default function RefVideo() {
     } catch (e) { showMessage('error', '上传失败') }
   }
 
+  // ===== 通过公网 URL 添加图片（绕过本地上传，供 DashScope 直接拉图）=====
+  const handleAddImageByUrl = () => {
+    const url = imageUrlInput.trim()
+    if (!url) return showMessage('warning', '请粘贴图片 URL')
+    if (!/^https?:\/\//i.test(url)) return showMessage('warning', 'URL 必须以 http:// 或 https:// 开头')
+    if (images.length >= MAX_IMAGES) return showMessage('warning', `最多 ${MAX_IMAGES} 张`)
+    // 从 URL 最后一段抓个文件名展示
+    const name = url.split('/').pop().split('?')[0] || 'url-image'
+    setImages(prev => [...prev, { url, preview: url, type: 'reference_image', name }])
+    setImageUrlInput('')
+    showMessage('success', '已通过 URL 添加图片（DashScope 可直接拉取）')
+  }
+
   const handleAudioUpload = async (file) => {
     try {
       const res = await generationApi.upload(file)
@@ -64,14 +140,15 @@ export default function RefVideo() {
     } catch (e) { showMessage('error', '上传失败') }
   }
 
-  // ===== 脚本解析 =====
-  const handleParseScript = () => {
+  // ===== 脚本解析（LLM 拆分镜 + 估时长 + 润色；失败降级到本地正则）=====
+  const handleParseScript = async () => {
     if (!rawScript.trim()) return showMessage('warning', '请先粘贴脚本内容')
     if (shots.length > 0 && shots.some(s => s.status === 'done')) {
       if (!window.confirm('重新解析会清空当前分镜和已生成的视频，确定继续？')) return
     }
+    setParsingScript(true)
     try {
-      const parsed = parseScript(rawScript)
+      const parsed = await parseScript(rawScript)
       if (parsed.shots.length === 0) {
         return showMessage('error', '未解析到任何分镜，请检查表格格式')
       }
@@ -79,9 +156,11 @@ export default function RefVideo() {
       setScriptTotalDuration(parsed.totalDuration)
       setVoiceoverTotal(parsed.voiceoverTotal || 0)
       setShots(parsed.shots)
-      showMessage('success', `已解析 ${parsed.shots.length} 个分镜`)
+      showMessage('success', `已解析 ${parsed.shots.length} 个分镜（AI 已估算每镜时长并润色提示词）`)
     } catch (e) {
       showMessage('error', '解析失败: ' + e.message)
+    } finally {
+      setParsingScript(false)
     }
   }
 
@@ -109,9 +188,13 @@ export default function RefVideo() {
         return resolve({ cancelled: true })
       }
 
-      // 构造 media：全局参考图 + 全局参考音频
-      const media = images.map(img => ({ type: img.type, url: img.url }))
-      if (audioFile) media.push({ type: 'reference_voice', url: audioFile.url })
+      // 构造 media：全局参考图 + 音色样本（reference_voice 是 media 元素的字段，不是独立项）
+      // 文档："该音频仅参考音色，与说话内容无关"，1-10 秒即可，挂在第一张参考图上
+      const media = images.map((img, i) => {
+        const item = { type: img.type, url: img.url }
+        if (i === 0 && audioFile) item.reference_voice = audioFile.url
+        return item
+      })
 
       if (images.length === 0) {
         showMessage('warning', '请先上传至少一张参考图')
@@ -220,7 +303,7 @@ export default function RefVideo() {
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
           {images.map((img, i) => (
             <div key={i} style={{ width: 140, border: '1px solid #e2eeea', borderRadius: 10, overflow: 'hidden', background: '#fafffe' }}>
-              <img src={img.preview} alt="" style={{ width: '100%', height: 100, objectFit: 'cover' }} />
+              <img src={img.preview} alt="" referrerPolicy="no-referrer" style={{ width: '100%', height: 100, objectFit: 'cover' }} />
               <div style={{ padding: 8 }}>
                 <select value={img.type} onChange={e => setImages(prev => prev.map((x, j) => j === i ? { ...x, type: e.target.value } : x))} style={{ ...inputStyle, width: '100%', marginBottom: 6, padding: '4px 8px', fontSize: 12 }}>
                   {MEDIA_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -233,16 +316,31 @@ export default function RefVideo() {
           {images.length < MAX_IMAGES && (
             <label style={{ width: 140, height: 160, border: '1px dashed #dce9e7', borderRadius: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: '#fafafa' }}>
               <div style={{ fontSize: 28, color: '#005d50' }}>+</div>
-              <div style={{ marginTop: 8, color: '#8c8c8c', fontSize: 12 }}>添加图片</div>
+              <div style={{ marginTop: 8, color: '#8c8c8c', fontSize: 12 }}>上传本地图片</div>
               <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => e.target.files[0] && handleImageUpload(e.target.files[0])} />
             </label>
           )}
         </div>
+        {images.length < MAX_IMAGES && (
+          <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input
+              type="text"
+              placeholder="或粘贴图片公网 URL（如 https://...png）"
+              value={imageUrlInput}
+              onChange={e => setImageUrlInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleAddImageByUrl() }}
+              style={{ ...inputStyle, flex: 1, fontSize: 12 }}
+            />
+            <button onClick={handleAddImageByUrl} style={{ ...btnSecondary, padding: '6px 14px', fontSize: 12, whiteSpace: 'nowrap' }}>
+              添加 URL
+            </button>
+          </div>
+        )}
       </div>
 
       <div style={{ ...cardStyle, marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <div style={{ fontWeight: 600, fontSize: 15 }}>🎵 参考音频（所有镜头共用，选填）</div>
+          <div style={{ fontWeight: 600, fontSize: 15 }}>🎵 音色样本（所有镜头共用，选填）</div>
           {!audioFile && (
             <label style={{ ...btnSecondary, cursor: 'pointer', padding: '6px 14px', fontSize: 12 }}>
               + 上传音频文件
@@ -262,7 +360,7 @@ export default function RefVideo() {
           </div>
         ) : (
           <div style={{ fontSize: 12, color: '#8c8c8c' }}>
-            上传一段配音 / 背景乐 / 任何音频，生成视频时会作为 reference_voice 传给每个镜头。不上传则不传。
+            上传一段 1-10 秒的音频，让模型参考演员的音色（与说话内容无关，台词写在分镜提示词里）。wav/mp3，≤15MB。不上传则不传。
           </div>
         )}
       </div>
@@ -283,17 +381,17 @@ export default function RefVideo() {
               <div style={{ fontSize: 15, fontWeight: 700, color: '#005d50', marginBottom: 4 }}>{scriptTitle}</div>
               <div style={{ fontSize: 12, color: '#8c8c8c' }}>
                 共 {shots.length} 个分镜
-                {scriptTotalDuration ? ` · 脚本时长 ${scriptTotalDuration}s` : ''}
+                {scriptTotalDuration ? ` · 脚本原时长 ${scriptTotalDuration}s` : ''}
                 {voiceoverTotal > 0 && (
                   <span>
                     {' · '}
-                    口播总时长
-                    <span style={{ fontWeight: 700, color: voiceoverTotal !== scriptTotalDuration ? '#b45309' : '#0d7a5f', marginLeft: 2 }}>
+                    分镜累计
+                    <span style={{ fontWeight: 700, color: scriptTotalDuration && voiceoverTotal !== scriptTotalDuration ? '#b45309' : '#0d7a5f', marginLeft: 2 }}>
                       {voiceoverTotal}s
                     </span>
-                    {voiceoverTotal !== scriptTotalDuration && (
+                    {scriptTotalDuration && voiceoverTotal !== scriptTotalDuration && (
                       <span style={{ color: '#b45309' }}>
-                        {' '}（与脚本差 {voiceoverTotal - scriptTotalDuration > 0 ? '+' : ''}{voiceoverTotal - scriptTotalDuration}s，已按口播调整每镜时长）
+                        {' '}（AI 按动作+台词+留白重新估算，与原脚本差 {voiceoverTotal - scriptTotalDuration > 0 ? '+' : ''}{voiceoverTotal - scriptTotalDuration}s）
                       </span>
                     )}
                   </span>
@@ -313,9 +411,10 @@ export default function RefVideo() {
           placeholder={'# 标题\n总时长：35s\n\n| 时间（开始 - 结束 \\| 时长） & 镜头描述 | 口播文案 | 镜头构成 |\n|---|---|---|\n| 0:00 - 0:03 \\| 3s - 演员刚做完... | 每次... | 景别：中景 / ... |'}
           style={scriptTextareaStyle}
         />
-        <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
-          <button onClick={handleParseScript} disabled={batchRunning} style={{ ...btnPrimary, padding: '10px 24px' }}>
-            🔍 解析脚本
+        <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10 }}>
+          {parsingScript && <span style={{ fontSize: 12, color: '#0d7a5f' }}>🤖 AI 拆分镜 + 估时长 + 润色中...</span>}
+          <button onClick={handleParseScript} disabled={batchRunning || parsingScript} style={{ ...btnPrimary, padding: '10px 24px', opacity: (batchRunning || parsingScript) ? 0.6 : 1 }}>
+            {parsingScript ? '🤖 解析中...' : '🔍 解析脚本（AI）'}
           </button>
         </div>
       </div>
@@ -326,6 +425,14 @@ export default function RefVideo() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <div style={{ fontWeight: 600, fontSize: 15 }}>🎬 分镜列表</div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              <button
+                onClick={handleOptimizeAll}
+                disabled={shots.length === 0 || optimizingShotIds.size > 0 || batchRunning}
+                style={{ ...btnSecondary, padding: '4px 12px', fontSize: 12, opacity: (shots.length === 0 || optimizingShotIds.size > 0 || batchRunning) ? 0.5 : 1 }}
+                title="调用 LLM 一次性优化所有分镜的提示词（保留台词、增强画面感）"
+              >
+                {optimizingShotIds.size > 0 ? `优化中 ${optimizingShotIds.size}/${shots.length}...` : '✨ 优化全部提示词'}
+              </button>
               <div style={{ fontSize: 12, color: '#8c8c8c' }}>分辨率</div>
               <select value={resolution} onChange={e => setResolution(e.target.value)} style={{ ...inputStyle, padding: '4px 8px', fontSize: 12 }}>
                 {RESOLUTION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -343,21 +450,14 @@ export default function RefVideo() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={{ fontSize: 14, fontWeight: 700, color: '#005d50' }}>#{shot.index}</span>
                   <span style={{ fontSize: 13, color: '#142528' }}>
-                    {shot.start ? `${shot.start} - ${shot.end}` : '未定时长'}
+                    {shot.start && shot.end ? `${shot.start} - ${shot.end}` : `分镜 #${shot.index}`}
                   </span>
-                  <span style={{ fontSize: 12, color: '#8c8c8c', padding: '2px 8px', background: '#f5f5f5', borderRadius: 10 }}>
+                  <span
+                    style={{ fontSize: 12, color: '#142528', padding: '2px 10px', background: '#eef7f5', borderRadius: 10, fontWeight: 600 }}
+                    title="基于动作+台词+留白估算，点 ✨ 优化 会重新估"
+                  >
                     {shot.duration}s
-                    {shot.durationSource === 'voiceover' ? (
-                      <span style={{ color: '#0d7a5f', marginLeft: 4 }} title="按口播 4.5 字/秒推算">🎙</span>
-                    ) : (
-                      <span style={{ color: '#8c8c8c', marginLeft: 4 }} title="保留原脚本时长（该镜头无口播）">🎞</span>
-                    )}
                   </span>
-                  {shot.durationSource === 'voiceover' && Math.abs(shot.duration - shot.originalDuration) > 1 && (
-                    <span style={{ fontSize: 11, color: '#b45309' }} title={`脚本原时长 ${shot.originalDuration}s`}>
-                      原 {shot.originalDuration}s
-                    </span>
-                  )}
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <span style={shotStatusBadgeStyle(shot.status)}>
@@ -378,9 +478,18 @@ export default function RefVideo() {
               </div>
 
               <div style={{ marginBottom: 8 }}>
-                <div style={{ ...labelStyle, fontSize: 12 }}>提示词</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <div style={{ ...labelStyle, fontSize: 12, margin: 0 }}>提示词</div>
+                  <button
+                    onClick={() => handleOptimizeShot(shot.id)}
+                    disabled={optimizingShotIds.has(shot.id) || batchRunning}
+                    style={{ ...btnSecondary, padding: '2px 10px', fontSize: 11, opacity: (optimizingShotIds.has(shot.id) || batchRunning) ? 0.5 : 1 }}
+                  >
+                    {optimizingShotIds.has(shot.id) ? '优化中...' : '✨ 优化'}
+                  </button>
+                </div>
                 <textarea
-                  rows={2}
+                  rows={5}
                   value={shot.prompt}
                   onChange={e => updateShot(shot.id, { prompt: e.target.value })}
                   placeholder="镜头画面描述"
@@ -389,7 +498,7 @@ export default function RefVideo() {
               </div>
 
               <div style={{ marginBottom: 8 }}>
-                <div style={{ ...labelStyle, fontSize: 12 }}>口播文案（参考，不直接喂给视频模型）</div>
+                <div style={{ ...labelStyle, fontSize: 12 }}>口播台词（已自动拼入提示词）</div>
                 <textarea
                   rows={1}
                   value={shot.voiceover}
