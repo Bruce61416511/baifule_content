@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', system-ui, 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  color: #142528;
+  background: #f5f7f6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 点阵背景 */
+.ant-layout {
+  background: #f5f7f6 !important;
+  background-image: radial-gradient(circle, #dce9e7 1px, transparent 1px) !important;
+  background-size: 24px 24px !important;
+}
+
+/* 页面入场动画 */
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.page-enter {
+  animation: fadeSlideIn 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Ant Design 主题覆盖 */
+.ant-card {
+  border-radius: 14px !important;
+  border-color: #e2eeea !important;
+}
+
+.ant-btn-primary {
+  box-shadow: 0 4px 12px rgba(0, 93, 80, 0.3) !important;
+}
+
+.ant-input:focus,
+.ant-input-focused,
+.ant-input-number:focus,
+.ant-select-focused .ant-select-selector {
+  border-color: #005d50 !important;
+  box-shadow: 0 0 0 2px rgba(0, 93, 80, 0.1) !important;
+}
+
+.ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: #005d50 !important;
+}
+
+.ant-tabs-ink-bar {
+  background: #005d50 !important;
+}
+
+.ant-tag {
+  border-radius: 6px !important;
+}
+
+.ant-modal-content {
+  border-radius: 16px !important;
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #dce9e7;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 骨架屏闪光 */
+.ant-skeleton-content .ant-skeleton-title,
+.ant-skeleton-content .ant-skeleton-paragraph > li {
+  background: linear-gradient(90deg, #edf7f5 25%, #d4f5ee 37%, #edf7f5 63%) !important;
+  background-size: 400% 100% !important;
+  animation: ant-skeleton-loading 1.4s ease infinite !important;
+}
+
+@keyframes ant-skeleton-loading {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}

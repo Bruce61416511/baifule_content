@@ -1,0 +1,65 @@
+{
+  "api_key": "sk-ws-H.PILPPHR.SC1e.MEYCIQCFyulV_BZiuQtOyzMdgxiFDrmgZmudNyyoORn14Dn-1AIhAO5UsFTsf0m6E-hMUhbNCI5d-dvTL_QpZ4YJzPbu52DH",
+  "llm_api_key": "sk-ws-H.PILPPHR.SC1e.MEYCIQCFyulV_BZiuQtOyzMdgxiFDrmgZmudNyyoORn14Dn-1AIhAO5UsFTsf0m6E-hMUhbNCI5d-dvTL_QpZ4YJzPbu52DH",
+  "llm_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "llm_model": "qwen-plus",
+  "models": {
+    "t2i": {
+      "model_id": "wanx2.6-t2i",
+      "defaults": {
+        "size": "1024*1024",
+        "n": 4,
+        "style": "<photography>"
+      },
+      "label": "文生图片",
+      "description": "文字描述生成图片"
+    },
+    "t2v": {
+      "model_id": "wan2.7-t2v",
+      "defaults": {
+        "resolution": "720P",
+        "ratio": "16:9",
+        "duration": 5,
+        "prompt_extend": true
+      },
+      "label": "文生视频",
+      "description": "纯文字描述生成视频"
+    },
+    "i2v": {
+      "model_id": "wan2.7-i2v",
+      "defaults": {
+        "resolution": "720P",
+        "ratio": "16:9",
+        "duration": 5
+      },
+      "label": "首尾视频",
+      "description": "首帧+尾帧图片生成视频"
+    },
+    "r2v": {
+      "model_id": "wan2.7-r2v",
+      "defaults": {
+        "resolution": "720P",
+        "ratio": "16:9",
+        "duration": 5
+      },
+      "label": "参考视频",
+      "description": "参考图+参考音频生成视频"
+    }
+  },
+  "voice": {
+    "model_id": "cosyvoice-v1",
+    "available_models": [
+      "cosyvoice-v1",
+      "cosyvoice-v2"
+    ],
+    "defaults": {
+      "voice": "longshu",
+      "format": "mp3",
+      "sample_rate": 22050,
+      "volume": 50,
+      "rate": 1
+    },
+    "label": "语音合成（TTS）",
+    "description": "文字转语音 + 声音克隆，用于生成角色配音"
+  }
+}
