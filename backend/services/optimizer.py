@@ -4,12 +4,9 @@ from pathlib import Path
 
 from openai import AsyncOpenAI
 
+from config_loader import load_config as _load_config
+
 CONFIG_DIR = Path(__file__).parent.parent / "config"
-
-
-def _load_config() -> dict:
-    with open(CONFIG_DIR / "models.json", "r", encoding="utf-8") as f:
-        return json.load(f)
 
 
 def _load_prompts() -> dict:

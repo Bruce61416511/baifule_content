@@ -1,6 +1,4 @@
 {
-  "api_key": "sk-ws-H.PILPPHR.SC1e.MEYCIQCFyulV_BZiuQtOyzMdgxiFDrmgZmudNyyoORn14Dn-1AIhAO5UsFTsf0m6E-hMUhbNCI5d-dvTL_QpZ4YJzPbu52DH",
-  "llm_api_key": "sk-ws-H.PILPPHR.SC1e.MEYCIQCFyulV_BZiuQtOyzMdgxiFDrmgZmudNyyoORn14Dn-1AIhAO5UsFTsf0m6E-hMUhbNCI5d-dvTL_QpZ4YJzPbu52DH",
   "llm_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
   "llm_model": "qwen-plus",
   "models": {

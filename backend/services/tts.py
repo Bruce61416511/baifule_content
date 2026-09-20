@@ -2,7 +2,6 @@
 
 使用 DashScope Python SDK 的 dashscope.audio.tts_v2.SpeechSynthesizer。
 """
-import json
 import asyncio
 import uuid
 from pathlib import Path
@@ -10,13 +9,7 @@ from pathlib import Path
 import dashscope
 from dashscope.audio.tts_v2 import SpeechSynthesizer
 
-
-CONFIG_DIR = Path(__file__).parent.parent / "config"
-
-
-def _load_config() -> dict:
-    with open(CONFIG_DIR / "models.json", "r", encoding="utf-8") as f:
-        return json.load(f)
+from config_loader import load_config as _load_config
 
 
 def _tts_sync(text: str, voice: str, model: str, format: str, api_key: str,

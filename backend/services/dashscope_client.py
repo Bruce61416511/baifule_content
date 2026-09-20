@@ -1,21 +1,14 @@
-import json
 import os
 import time
 import asyncio
-from pathlib import Path
 from typing import Optional
 
 import httpx
 
-CONFIG_DIR = Path(__file__).parent.parent / "config"
+from config_loader import load_config as _load_config
 
 # 内存中存储任务状态
 _tasks: dict = {}
-
-
-def _load_config() -> dict:
-    with open(CONFIG_DIR / "models.json", "r", encoding="utf-8") as f:
-        return json.load(f)
 
 
 async def _submit_task(endpoint: str, payload: dict) -> str:

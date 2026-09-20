@@ -7,6 +7,9 @@ CONFIG_DIR = Path(__file__).parent.parent / "config"
 
 router = APIRouter(prefix="/config")
 
+# 密钥类字段：只在 .env / 环境变量中管理，不进 models.json、不经接口传输
+SECRET_KEYS = ("api_key", "llm_api_key")
+
 
 def _read_json(filename: str) -> dict:
     filepath = CONFIG_DIR / filename
@@ -26,12 +29,19 @@ def _write_json(filename: str, data: dict):
 
 @router.get("/models")
 async def get_models():
-    return _read_json("models.json")
+    data = _read_json("models.json")
+    # 密钥已迁移到后端 .env，接口只返回空占位，不暴露真实值
+    for k in SECRET_KEYS:
+        data[k] = ""
+    return data
 
 
 @router.put("/models")
 async def update_models(data: dict):
     try:
+        # 前端回传中可能夹带密钥字段，一律丢弃，避免明文落盘
+        for k in SECRET_KEYS:
+            data.pop(k, None)
         _write_json("models.json", data)
         return {"status": "ok"}
     except Exception as e:

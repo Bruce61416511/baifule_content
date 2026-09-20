@@ -24,6 +24,7 @@ backend/*.sqlite
 .env
 *.env
 .env.*
+!.env.example
 
 # ================== 系统 ==================
 .DS_Store

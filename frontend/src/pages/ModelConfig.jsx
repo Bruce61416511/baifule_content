@@ -107,9 +107,10 @@ export default function ModelConfig() {
 
       <div style={cardStyle}>
         <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16, color: '#142528' }}>🔑 API 密钥</div>
+        <div style={{ fontSize: 13, color: '#17857e', background: '#f0fbf9', border: '1px solid #c7eae6', borderRadius: 6, padding: '10px 14px', marginBottom: 16 }}>
+          🔒 API Key 已迁移到后端 <code>backend/.env</code> 文件中管理（<code>DASHSCOPE_API_KEY</code> / <code>LLM_API_KEY</code>），不再在页面显示或保存。修改密钥请编辑 .env 后重启后端。
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
-          <FormField editing={editing}><div style={labelStyle}>DashScope API Key（视频生成）</div><input type="password" value={cfg.api_key} onChange={e => upd('api_key', e.target.value)} placeholder="sk-..." style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }} /></FormField>
-          <FormField editing={editing}><div style={labelStyle}>LLM API Key（提示词优化，可留空使用同 Key）</div><input type="password" value={cfg.llm_api_key} onChange={e => upd('llm_api_key', e.target.value)} placeholder="sk-..." style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }} /></FormField>
           <FormField editing={editing}><div style={labelStyle}>LLM Base URL</div><input value={cfg.llm_base_url} onChange={e => upd('llm_base_url', e.target.value)} style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }} /></FormField>
           <FormField editing={editing}><div style={labelStyle}>LLM 模型名称</div><input value={cfg.llm_model} onChange={e => upd('llm_model', e.target.value)} placeholder="qwen-plus" style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }} /></FormField>
         </div>
